@@ -80,7 +80,7 @@ pip install -r requirements.txt
 
 ### Google Gemini(預設)
 
-預設使用 Gemini 的 `gemini-3.5-flash-lite`,回應快、免費額度大;要規劃複雜的工作流時,建議改用 Claude 訂閱。到 [Google AI Studio](https://aistudio.google.com/apikey) 免費建立一把 API Key,貼到設定指引的輸入框即可;Atlas 會先向 Google 確認金鑰有效,再存進 `backend/.env`,不需要重新啟動。
+**建議新使用者從這裡開始**:預設使用 Gemini 的 `gemini-3.5-flash-lite`,不用信用卡、免費額度就夠日常使用,回應也快;要規劃複雜的工作流時,建議改用 Claude 訂閱。到 [Google AI Studio](https://aistudio.google.com/apikey) 免費建立一把 API Key,貼到設定指引的輸入框即可;Atlas 會先向 Google 確認金鑰有效,再存進 `backend/.env`,不需要重新啟動。
 
 ### 其他雲端模型
 
@@ -108,14 +108,15 @@ claude          # 照畫面指示登入
 
 裝好 Ollama、下載模型後,在設定指引按「改用並送出」,或到設定頁把供應商選成 **Ollama**,不需要任何 API Key,資料不會離開你的電腦。
 
-以下是實際測試過、能擔任 AI 助手的最小建議配置:
+本機模型對顯示卡有硬需求,依你的顯示卡等級二選一(都實際測試過,能擔任 AI 助手):
 
-| 模型 | 下載指令 | 顯示記憶體(context 65536 時實測) |
-|---|---|---|
-| Gemma 4 12B | `ollama pull gemma4:12b` | 9.2 GB,建議 12 GB 顯示卡 |
-| Qwen3.8 27B | `ollama pull qwen3.8:27b` | 18.4 GB,建議 24 GB 顯示卡 |
+| 顯示卡等級 | 模型 | 下載指令 | 實際佔用(context 65536) |
+|---|---|---|---|
+| **12 GB** | Gemma 4 12B | `ollama pull gemma4:12b` | 9.2 GB |
+| **24 GB** | Qwen3.8 27B | `ollama pull qwen3.8:27b` | 18.4 GB |
 
-- 顯示記憶體足夠的話建議用 Qwen3.8 27B:需要 AI 助手直接幫你修改工作流時,較大的模型明顯可靠。
+- 顯示卡低於 12 GB 的話,請直接用上面的 Gemini 免費 API Key,不建議勉強跑本機模型。
+- 有 24 GB 的話建議用 Qwen3.8 27B:需要 AI 助手直接幫你修改工作流時,較大的模型明顯可靠。
 - 設定頁的 **context 長度**預設 65536,不要調低。AI 助手一輪要送 1.4～4 萬 tokens 的提示詞加上工具定義與對話,Ollama 塞不下時不會報錯,會直接截掉提示詞前半,模型就會漏掉大部分規則。
 - 模型第一次回應需要先載入顯示卡,會比較慢,之後就正常。
 
