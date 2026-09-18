@@ -1960,13 +1960,16 @@ async def put_skills_dir(req: SkillsDirRequest):
     """設定自訂 Skill 目錄。空字串 = 還原預設。指定路徑必須是已存在的資料夾。"""
     from pathlib import Path as _Path
     from settings import set_skills_dir
-    from skill_scanner import get_skills_root, list_available_skills
+    from skill_scanner import get_skills_root, list_available_skills, seed_default_skills
     path = (req.skills_dir or "").strip()
     if path:
         p = _Path(path).expanduser()
         if not p.is_dir():
             raise HTTPException(status_code=400, detail=f"找不到資料夾:{p}")
     set_skills_dir(path)
+    # 內建 skill 平常只在啟動時植入;不在這裡補,換到新資料夾後要等重啟才出現,
+    # 期間用到 scraped-content-parser 的爬蟲工作流會找不到 skill。
+    seed_default_skills()
     resolved = get_skills_root()
     return {
         "skills_dir": path,
