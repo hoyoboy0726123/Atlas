@@ -1,0 +1,119 @@
+# Atlas
+
+用白話描述你想自動化的事,Atlas 的 AI 助手會幫你把它變成一條可重複執行的工作流 —— 在畫布上看得到每一步、可以手動調整、可以排程、跑完留下紀錄。
+
+AI 模型可以用雲端(Groq / Gemini / OpenAI / Anthropic),也可以完全在本機用 Ollama 跑,資料不必離開你的電腦。
+
+## 能做什麼
+
+工作流由「節點」串成,常用的有:
+
+| 節點 | 用途 |
+|---|---|
+| 腳本 | 執行你現有的 `.py` / `.bat` / shell 腳本 |
+| AI 技能 | 白話描述任務,AI 寫程式並執行;第二次起走快取,幾乎不花 token |
+| 多代理 | 多個專業角色分工研究、分析、審查、撰寫 |
+| 條件分支 | 依上一步的結果走不同路(if / switch) |
+| 人工確認 | 暫停等你在 Telegram 點頭,再繼續不可逆的動作 |
+| 網頁爬蟲 | 把網頁轉成乾淨內容,支援需要登入或有防護的網站 |
+| Outlook 自動化 | 收發信、附件、行事曆(需要本機安裝 Outlook) |
+| 視覺驗證 | 讓視覺模型看產出的畫面,判斷符不符合預期 |
+| 桌面自動化 | 操作沒有 API 的軟體:錄製滑鼠鍵盤,或直接挑選畫面上的元件(Windows) |
+
+另外還有:排程執行、Telegram 通知與遙控、把工作流開放給其他 AI 用的 MCP server。
+
+## 系統需求
+
+- **Windows 10 / 11**(建議)。macOS / Linux 可以跑大部分功能,但桌面自動化節點只支援 Windows。
+- **Python 3.11 ~ 3.13**(3.14 目前還不能用)
+- **Node.js 18 以上**
+- **[uv](https://docs.astral.sh/uv/)**(建議,安裝最快;沒有也可以用 pip)
+- **[Ollama](https://ollama.com/)**(選配,想用本機模型才需要)
+
+## 安裝與啟動
+
+### Windows:一鍵啟動
+
+```bat
+git clone <this-repo-url> Atlas
+cd Atlas
+launch.bat
+```
+
+第一次執行會自動安裝後端與前端的依賴(有 uv 就用 uv,沒有就用 pip),需要幾分鐘。之後每次執行只會啟動服務。
+
+啟動後打開 **http://localhost:3012**。
+
+### 用 uv 手動安裝
+
+```bash
+cd backend
+uv sync                      # 依 pyproject.toml / uv.lock 建立 .venv 並安裝依賴
+cp .env.example .env         # Windows 用 copy
+uv run uvicorn main:app --host 127.0.0.1 --port 8014
+```
+
+另開一個終端機啟動前端:
+
+```bash
+cd frontend
+npm install
+npx next dev --port 3012
+```
+
+### 用 pip 手動安裝
+
+```bash
+cd backend
+python -m venv .venv
+.venv\Scripts\activate       # macOS / Linux: source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+之後同上啟動後端與前端。macOS / Linux 也可以直接執行 `./start.sh`。
+
+## 設定 AI 模型
+
+打開 **設定頁**(http://localhost:3012/settings),選擇主模型的供應商與模型。
+
+### 雲端模型
+
+在 `backend/.env` 填入你要用的供應商 API Key(至少一個),重新啟動後端:
+
+| 供應商 | 環境變數 |
+|---|---|
+| Groq | `GROQ_API_KEY` |
+| Google Gemini | `GEMINI_API_KEY` |
+| OpenAI | `OPENAI_API_KEY` |
+| Anthropic | `ANTHROPIC_API_KEY` |
+
+### 本機模型(Ollama)
+
+裝好 Ollama、下載模型後,在設定頁把供應商選成 **Ollama**、選擇模型即可,不需要任何 API Key,資料不會離開你的電腦。
+
+以下是實際測試過、能擔任 AI 助手的最小建議配置:
+
+| 模型 | 下載指令 | 最低顯示記憶體 |
+|---|---|---|
+| Gemma 4 12B | `ollama pull gemma4:12b` | 8 GB VRAM |
+| Qwen3.8 27B | `ollama pull qwen3.8:27b` | 24 GB VRAM |
+
+- 顯示記憶體足夠的話建議用 Qwen3.8 27B:需要 AI 助手直接幫你修改工作流時,較大的模型明顯可靠。
+- 設定頁的 **context 長度**預設 32768。AI 助手的系統提示本身就很長,調得更小會被截斷,建議不要改小。
+- 模型第一次回應需要先載入顯示卡,會比較慢,之後就正常。
+
+## 選配功能
+
+- **Telegram**:在設定頁填入 Bot Token 與 Chat ID,就能收到工作流完成通知、在手機上核准「人工確認」節點,也可以開啟遠端遙控。
+- **Skill 沙盒**:AI 技能產生的程式預設直接在本機執行。想隔離執行的話,執行 `sandbox\setup_sandbox.bat` 建立 WSL + Docker 沙盒容器,再到設定頁切換成沙盒模式。
+- **網路搜尋**:在設定頁填入 [Tavily](https://tavily.com/) API Key 並開啟,AI 技能與多代理就能查即時資料。
+
+## 安全須知
+
+- 後端預設只接受本機連線(`127.0.0.1`)。它的 API **沒有登入驗證**,而且會執行 AI 產生的程式、操作你的桌面,請不要直接開放到網路上。確實需要區網存取時,啟動前設定環境變數 `ATLAS_HOST=0.0.0.0`,並自行評估風險。
+- API Key 只放在 `backend/.env`,這個檔案已被 `.gitignore` 排除,不會被提交。
+- 桌面自動化執行時會真的移動滑鼠、按鍵盤。跑到一半要停,半秒內連按兩次 `Esc`,或把滑鼠甩到螢幕左上角。
+
+## 授權
+
+[MIT](LICENSE)

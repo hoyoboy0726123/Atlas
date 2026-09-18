@@ -1,0 +1,41 @@
+# sandbox/docker-compose.yml
+#
+# Atlas — 沙盒週邊服務
+#
+# 目前管的服務：
+#   - flaresolverr：Cloudflare challenge 解決器，由 web_crawler 節點 Tier 2 用
+#                   port 8191 暴露給 host（backend 透過 http://localhost:8191/v1 呼叫）
+#
+# 不管的服務：
+#   - atlas-sandbox（Skill 執行容器）：仍由 setup.sh 用 `docker run` 拉起，
+#     bind mount 細節太複雜（USER_HOME 動態探測），暫不挪到 compose；
+#     未來想統一可把 setup.sh 內 `docker run` 那段搬進來。
+#
+# 怎麼跑：
+#   sandbox/setup.sh 末尾會自動：
+#     cd "$PROJECT_DIR/sandbox" && docker compose up -d
+#   你也可以單獨跑：
+#     cd sandbox && docker compose up -d flaresolverr
+#     cd sandbox && docker compose down              # 停掉
+#     cd sandbox && docker compose logs flaresolverr # 看 log
+
+services:
+  flaresolverr:
+    # 官方 image，Cloudflare 變動時跟著更新（可換 :v3.x.x 鎖版本）
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: atlas-flaresolverr
+    restart: unless-stopped
+    ports:
+      - "8191:8191"
+    environment:
+      LOG_LEVEL: info
+      LOG_HTML: "false"           # 設 true 會把整份 HTML 印 log，洗版用
+      CAPTCHA_SOLVER: none        # Tier 3（付費 captcha service）目前不啟用
+      TZ: Asia/Taipei
+    # FlareSolverr 沒有 /health endpoint；用根路徑 "{}msg: ...is ready!}" 驗證即可
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8191/ | grep -q 'FlareSolverr is ready'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

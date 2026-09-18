@@ -1,0 +1,9 @@
+{
+  "name": "atlas-skill-deps",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PPT/DOCX skill dependencies for skill nodes",
+  "dependencies": {
+    "pptxgenjs": "^4.0.1"
+  }
+}

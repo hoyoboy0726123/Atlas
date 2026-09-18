@@ -1,0 +1,43 @@
+# Skill 沙盒容器預裝套件
+# 分成幾個 tier：build 時 Dockerfile 會拆成多個 RUN 讓每層獨立裝，避免一次性 OOM
+#
+# 沒進這清單但某個 workflow 需要的套件，可以事後臨時裝進容器：
+#   wsl sudo docker exec atlas-sandbox pip install <pkg>
+# 要永久加，把它寫進這檔然後 rebuild image。
+
+pandas
+openpyxl
+numpy
+python-dateutil
+pytz
+defusedxml
+Pillow
+python-docx
+requests
+beautifulsoup4
+lxml
+httpx[http2]
+matplotlib
+opencv-python-headless
+python-pptx
+pdfplumber
+markdown
+newspaper3k
+cloudscraper
+feedparser
+lxml_html_clean
+fake_useragent
+crawl4ai
+trafilatura
+markdownify
+playwright
+yt-dlp
+markitdown[pptx]
+xlsxwriter
+tabulate
+pyfiglet
+qrcode
+
+# openai-whisper 已移出預裝(會拖 PyTorch ~2-3GB、只服務影音轉字幕情境)。
+# 需要時 runtime install_dep 自癒會當場裝,或手動:
+#   wsl docker exec atlas-sandbox pip install openai-whisper

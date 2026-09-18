@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+build/
+
+# 環境變數 / 金鑰
+.env
+*.env.local
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# 資料庫 / log / 執行期產物
+*.db
+*.sqlite
+*.log
+ai_output/
+backend/ai_output/
+pipelines/
+backend/pipelines/
+
+# 沙盒暫存
+sandbox/_tmp/
+sandbox/.needs_wsl_shutdown
+
+# 使用者放進來接工作流的外部專案
+external_projects/
+
+# 系統 / 編輯器
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.claude/

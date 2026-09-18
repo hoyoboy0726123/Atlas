@@ -1,0 +1,69 @@
+# 需要 Python 3.10+(程式用到 X | Y union 型別註解、list[str] 等)
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+python-dotenv==1.0.1
+pyyaml==6.0.2
+pyperclip>=1.8  # computer_use 節點貼上非 ASCII(中文)文字時用
+jinja2>=3.1.0
+langchain-core
+langchain-groq
+langchain-google-genai
+google-genai
+langchain-ollama>=0.3.0
+langchain-openai
+langchain-anthropic
+apscheduler==3.10.4
+sqlalchemy==2.0.36
+python-telegram-bot==21.6
+aiofiles==24.1.0
+openpyxl
+python-multipart
+
+# 人工確認節點「附上一步驟輸出檔案預覽」功能（host 端 render 成 PNG 傳 TG）
+# B1 簡單 render 路徑用；PDF 後備透過 libreoffice 轉 PDF 再用 pypdfium2 抓第 1 頁
+pandas
+python-docx
+python-pptx
+Pillow
+matplotlib
+pypdfium2
+
+# 桌面自動化節點（computer_use）核心套件 — 後端必備（不放在 skill_packages，因為它們不是 skill 用的）
+pyautogui
+pynput
+mss
+opencv-python
+numpy
+# UIA 自動化 (錄製時抓 UI element + 回放 UIA-first 三層 fallback) — Windows only、非 Windows 平台會跳過
+uiautomation; sys_platform == "win32"
+
+# 網頁爬蟲節點（web_crawler）host 端依賴
+# crawl4ai 跑在沙盒、host 不裝（500MB chromium 不必兩邊都有）；
+# host 只負責 Tier 2 fallback：呼叫 FlareSolverr（httpx）+ HTML 轉 markdown
+httpx
+trafilatura
+markdownify
+
+# computer_use 節點 OCR 比對用 — RapidOCR(PaddleOCR 模型轉 ONNX 版)
+# 之前用 Windows.Media.Ocr 在 <150% scaling 對複雜中文(檔/總/盤/畫等)漏字,
+# 在 Mica 半透明背景上更糟。RapidOCR 跨 scaling / 跨 OS 都穩定整詞識別、
+# 依賴只剩 onnxruntime ~50MB + 模型 ~15MB,首次跑會下載模型。
+# 鎖版本:3.8.1→3.9.2 已實測回歸通過(OCR 12/12 繁體標籤、定位、取值、業務用語 8/8)。
+# 不鎖的話重裝會拿到未測過的版本 —— 開發機與新環境版本漂移比版本舊更危險。
+rapidocr==3.9.2
+onnxruntime
+# 簡繁體歸一化 — RapidOCR 中文模型訓練語料以簡體為主,target 通常是繁體
+# (例如「軟」會被讀成「软」、「畫」讀成「画」),歸一後雙邊都轉簡體再比對
+opencc-python-reimplemented
+# AI 助手長期記憶 — 地端向量檢索(provider != gemini 時用、資料不外送)。
+# ONNX runtime、不拖 torch;首次啟動自動下載 MiniLM 多語言模型(~220MB)。
+# 沒裝 / 下載失敗 → episodic 自動降級關鍵字檢索(facts 記憶不受影響)。
+fastembed
+mcp
+starlette>=0.37.2,<0.39.0  # 釘住:mcp 會想升 starlette>=0.49 但 fastapi 0.115 需 <0.39
+
+# output.json_schema 的驗證引擎。
+# ⚠ 以前沒宣告，只是剛好被 mcp 當相依裝進來 —— 相依樹一動就會讓所有
+#   json_schema 合約靜默失效（實測型別完全錯誤也印「通過」）。明確宣告。
+jsonschema>=4.0.0

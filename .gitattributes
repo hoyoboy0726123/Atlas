@@ -1,0 +1,41 @@
+# 保證跨平台一致的換行符
+# Windows git 預設 core.autocrlf=true 會在 checkout 時把 LF 改成 CRLF,
+# 但下面這些檔案在 WSL / Linux 容器內跑、CRLF 會直接壞掉:
+#   - bash script: `set -euo pipefail\r` 被當成 invalid option
+#   - Dockerfile: RUN 指令尾巴的 \r 進到 image 內、shell 解析 bug
+#   - YAML: PyYAML 對 \r 容忍、但 docker-compose 嚴格時會炸
+
+# 預設讓 git 自動判斷文字檔、但 checkout 統一 LF
+* text=auto eol=lf
+
+# 明確強制以下類型只能 LF(覆蓋 autocrlf=true)
+*.sh         text eol=lf
+*.bash       text eol=lf
+Dockerfile   text eol=lf
+*.dockerfile text eol=lf
+*.yml        text eol=lf
+*.yaml       text eol=lf
+
+# Windows-only 檔案保留 CRLF(WSL 不會碰)
+*.bat        text eol=crlf
+*.cmd        text eol=crlf
+*.ps1        text eol=crlf
+
+# 二進位檔不要做任何 EOL 轉換
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.zip   binary
+*.gz    binary
+*.tar   binary
+*.xlsx  binary
+*.docx  binary
+*.pptx  binary
+*.db    binary
+*.sqlite binary
+*.ttf   binary
+*.woff  binary
+*.woff2 binary
