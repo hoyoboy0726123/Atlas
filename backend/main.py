@@ -5798,9 +5798,21 @@ _INJECTABLE_NODE_GROUPS = [
      ["視覺驗證", "截圖驗證", "看起來對", "版面", "排版對", "畫面對不對",
       "visual_validation"]),
     ("computer_use",
-     ["桌面自動化節點", "computer_use"],
+     ["桌面自動化節點", "computer_use", "桌面自動化動作清單", "同一組操作重複"],
      ["點按", "按鈕", "操作軟體", "操作軟", "桌面", "桌面自動", "自動點", "滑鼠", "鍵盤",
-      "uia", "點視窗"]),
+      "uia", "點視窗", "computer_use", "rpa", "控制項", "抓取元素", "inspector", "錄製",
+      "探測", "分歧", "等待", "逾時", "迴圈", "for_each", "逐筆", "剪貼簿", "tk", "tkinter",
+      "下載", "對話框", "遮罩", "喚醒", "視窗", "ocr", "錨點", "查無資料", "資料處理中",
+      "匯出", "下拉", "填值", "睡眠分頁", "料號", "逐一查"]),
+    # 有裝 MCP server 才有意義;server 名稱在執行期另外加進意圖(見 _needed_nodes_or_all)
+    ("mcp",
+     ["MCP 節點"],
+     ["mcp", "mcp_server", "mcp_tool"]),
+    # web_search 工具的使用規範(2k tokens):只有研究 / 找網址 / 找套件時才需要
+    ("research",
+     ["網路搜尋"],
+     ["研究", "搜尋", "查一下", "查資料", "比較", "競品", "市場", "趨勢", "最新", "網址在哪",
+      "找網址", "rss", "endpoint", "套件", "怎麼裝", "web_search", "調查", "收料"]),
 ]
 
 
@@ -5826,7 +5838,28 @@ def _detect_needed_nodes(convo_text: str) -> set:
     for key, _titles, intents in _INJECTABLE_NODE_GROUPS:
         if any(kw.lower() in t for kw in intents):
             needed.add(key)
+    # 使用者提到已安裝的 MCP server 名稱(例「用 github 開 issue」)也算需要 MCP 段
+    if "mcp" not in needed:
+        try:
+            if any(n and n.lower() in t for n in _mcp_server_names()):
+                needed.add("mcp")
+        except Exception:
+            pass
     return needed
+
+
+def _mcp_server_names() -> list:
+    try:
+        from db import list_mcp_servers
+        return [s.get("name") or "" for s in list_mcp_servers(enabled_only=True)]
+    except Exception:
+        return []
+
+
+def _needed_nodes_or_all(convo_text: str):
+    """揭露閘門的統一入口:convo_text 空 → None(= 全留、向後相容);否則回命中的節點集合。
+    主提示詞的靜態段與執行期產生的動態段(Outlook 模板 / role 清單 / MCP)都用這個判斷。"""
+    return None if not convo_text else _detect_needed_nodes(convo_text)
 
 
 def _classify_block(title_line) -> "Optional[str]":
@@ -5986,6 +6019,10 @@ def _build_pipeline_system_prompt(channel: str = "desktop", convo_text: str = ""
     # ── 漸進揭露:核心常駐、節點專屬大段依對話意圖注入(convo_text 空則全留)──
     base = _apply_progressive_disclosure(base, convo_text)
     parts = [base]
+    _needed = _needed_nodes_or_all(convo_text)
+
+    def _want(node_key: str) -> bool:
+        return _needed is None or node_key in _needed
     # ── Agent Skills 清單 ──────────────────────────────────────────────
     try:
         from skill_scanner import list_available_skills
@@ -6004,9 +6041,16 @@ def _build_pipeline_system_prompt(channel: str = "desktop", convo_text: str = ""
         pass
     # ── MCP servers(有安裝才注入;沒裝 → 助手不知道 MCP、不會亂用)─────────
     try:
-        _mcp_sec = _mcp_prompt_section()
-        if _mcp_sec:
-            parts.append(_mcp_sec)
+        if _want("mcp"):
+            _mcp_sec = _mcp_prompt_section()
+            if _mcp_sec:
+                parts.append(_mcp_sec)
+        else:
+            # 沒命中意圖時只留一行存在性備忘(1.5k → 幾十 tokens),提到 server 名或 mcp 才展開
+            _names = [n for n in _mcp_server_names() if n]
+            if _names:
+                parts.append("\n## MCP\n已安裝 MCP server:" + "、".join(f"`{n}`" for n in _names)
+                             + "。需要用到時說明會自動附上(或 `read_help_doc('mcp')`)。")
     except Exception:
         pass
     # ── Secrets 名稱清單(只給名稱、值永不進提示詞;沒存任何 secret 就不提)──
@@ -6026,6 +6070,8 @@ def _build_pipeline_system_prompt(channel: str = "desktop", convo_text: str = ""
     # ── Outlook 模板清單 ──────────────────────────────────────────────
     # 對 outlook_automation 節點來說，挑對模板比讓 LLM 自由發揮穩很多。
     try:
+        if not _want("outlook"):
+            raise StopIteration   # 沒提到信件 → 模板清單(2k tokens)不注入
         lines = ["", "## Outlook 自動化節點可用模板（outlook_template 欄位）：", ""]
         for tid, label, desc, params in _OUTLOOK_TEMPLATES_FOR_PROMPT:
             lines.append(f"- **`{tid}`** — {label}")
@@ -6071,7 +6117,7 @@ def _build_pipeline_system_prompt(channel: str = "desktop", convo_text: str = ""
     # 規範跟 BUILTIN_ROLE_IDS / 自訂 yaml 對齊,AI 助手不准用清單外的 role 名
     try:
         from pipeline.subagent_runner import load_roles, BUILTIN_ROLE_IDS
-        all_roles = load_roles()
+        all_roles = load_roles() if _want("subagent") else {}   # 沒提到代理 → 角色清單(1.9k)不注入
         if all_roles:
             lines = ["", "## 可用 Subagent role 清單(寫 `subagent_role:` 只能用這些)", ""]
             for rid in sorted(all_roles.keys(), key=lambda r: (0 if r in BUILTIN_ROLE_IDS else 1, r)):
@@ -6199,18 +6245,9 @@ _CHAT_HISTORY_CAP = 30
 # 兩個模型 6 次提問一次都沒去查 —— 模型覺得自己知道就不會查。所以改由系統判斷:
 # 使用者的話或綁定的工作流跟該主題有關,就把 help doc 直接附進這一輪的 system prompt。
 # 附在 workflow state 之後、主提示詞(cache prefix)不受影響;無關主題的輪次不多花 token。
-_AUTO_HELP_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "computer_use": (
-        "桌面自動化", "computer_use", "uia", "控制項", "探測", "分歧", "等待", "逾時", "迴圈",
-        "for_each", "逐筆", "清單", "剪貼簿", "tk", "tkinter", "下載", "對話框", "遮罩", "錄製",
-        "點擊", "喚醒", "視窗", "ocr", "錨點", "查無資料", "資料處理中", "匯出", "下拉", "填值",
-        "抓取元素", "inspector", "rpa", "滑鼠", "鍵盤", "睡眠分頁",
-    ),
-    "variables": (
-        "now.", "序號", "當月", "上月", "上個月", "下月", "下個月", "日期", "跨節點", "steps.",
-        "變數", "input.", "secrets", "傳值", "save_as",
-    ),
-}
+_AUTO_HELP_TOPICS = {"computer_use": ("computer_use",), "mcp": ()}   # 節點群組 → 要附的 help doc
+_VARIABLES_KEYWORDS = ("now.", "序號", "當月", "上月", "上個月", "下月", "下個月", "日期", "跨節點",
+                       "steps.", "變數", "input.", "secrets", "傳值", "save_as")
 
 
 def _auto_help_block(req: "PipelineChatRequest") -> str:
@@ -6223,18 +6260,13 @@ def _auto_help_block(req: "PipelineChatRequest") -> str:
             text_parts.append(req.extra_system)
         blob = "\n".join(text_parts).lower()
         topics: list[str] = []
-        for topic, kws in _AUTO_HELP_KEYWORDS.items():
-            if any(k in blob for k in kws):
-                topics.append(topic)
-        # 綁定的工作流有桌面自動化節點 → 一律附 computer_use(改動作序列時最需要)
-        if "computer_use" not in topics and req.workflow_id:
-            try:
-                import db
-                wf = db.get_workflow(req.workflow_id) or {}
-                if "computer_use: true" in (wf.get("yaml") or ""):
-                    topics.insert(0, "computer_use")
-            except Exception:
-                pass
+        # 跟主提示詞的漸進揭露共用同一套意圖偵測(含綁定工作流的 YAML),兩邊永遠一致
+        needed = _detect_needed_nodes(_convo_text_for_disclosure(req))
+        for node_key, docs in _AUTO_HELP_TOPICS.items():
+            if node_key in needed:
+                topics.extend(d for d in docs if d not in topics)
+        if any(k in blob for k in _VARIABLES_KEYWORDS):
+            topics.append("variables")
         if not topics:
             return ""
         parts = ["", "## 相關說明(系統依主題自動附上,回答與修改請以此為準、不要憑印象)"]

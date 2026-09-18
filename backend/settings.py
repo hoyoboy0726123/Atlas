@@ -16,7 +16,8 @@ _DEFAULT = {
     "model": GEMINI_MODEL_MAIN,    # e.g. "gemini-3.5-flash-lite" or "qwen3:8b"
     "ollama_base_url": "http://localhost:11434",
     "ollama_thinking": "off",      # "auto" | "on" | "off" — 預設關閉，避免 thinking 模式 rambling 卡住
-    "ollama_num_ctx": 32768,       # Ollama context window tokens（僅 Ollama）；本應用 system prompt 約 17~22k，低於 32768 會截斷
+    "ollama_num_ctx": 65536,       # Ollama context window tokens（僅 Ollama）。AI 助手一輪 = 提示詞 1.4~4 萬 + 工具 5.5k
+                                   # + 對話 + 回答;32768 實測會被 Ollama 靜默截掉前半(模型只看到後 16k)
     "gemini_thinking": "off",      # "off" | "auto" | "low" | "medium" | "high"
     "anthropic_thinking": "off",   # "off" | "on" — Claude Opus 4 系列 extended thinking
     # ── 副模型(節點可在 panel 選 llm_role: secondary 切到這個)──
@@ -135,6 +136,8 @@ def update_settings(
     num_ctx = ollama_num_ctx if ollama_num_ctx is not None else _DEFAULT["ollama_num_ctx"]
     if not isinstance(num_ctx, int) or num_ctx < 2048 or num_ctx > 262144:
         raise ValueError(f"invalid ollama_num_ctx: {num_ctx}(需介於 2048~262144)")
+    if provider == "ollama" and num_ctx < 32768:
+        raise ValueError(f"ollama_num_ctx={num_ctx} 太小:AI 助手一輪至少 2 萬 tokens,Ollama 塞不下會靜默截掉提示詞前半。請設 32768 以上(建議 65536)")
 
     # ── Secondary 驗證(可全空表示停用)──
     sec_provider = (secondary_provider or "").strip()

@@ -2326,7 +2326,7 @@ export default function SettingsPage() {
   const [model, setModel] = useState('')
   const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434')
   const [thinking, setThinking] = useState<'auto' | 'on' | 'off'>('off')
-  const [numCtx, setNumCtx] = useState<number>(32768)
+  const [numCtx, setNumCtx] = useState<number>(65536)
   const [geminiThinking, setGeminiThinking] = useState<'off' | 'auto' | 'low' | 'medium' | 'high'>('off')
   const [antThinking, setAntThinking] = useState<'off' | 'on'>('off')
   // ── 副模型 state(空 provider = 不啟用)──
@@ -2373,7 +2373,7 @@ export default function SettingsPage() {
       setModel(cur.model)
       setOllamaUrl(cur.ollama_base_url || 'http://localhost:11434')
       setThinking(cur.ollama_thinking || 'off')
-      setNumCtx(cur.ollama_num_ctx || 32768)
+      setNumCtx(cur.ollama_num_ctx || 65536)
       setGeminiThinking(cur.gemini_thinking || 'off')
       setAntThinking(cur.anthropic_thinking || 'off')
       // 載入副模型(provider 有值 = 已啟用)
@@ -2779,7 +2779,7 @@ export default function SettingsPage() {
                   Context 長度 (num_ctx)
                 </label>
                 <p className="text-xs text-gray-500 mb-3">
-                  模型一次能處理的 token 數。越大越不容易截斷，但吃更多 VRAM 且變慢。本應用 AI 助手 system prompt 約 17~22k tokens，預設 32768 才不會被截斷；若 VRAM 不足可調低，但低於 32768 在規劃工作流時可能斷句。
+                  模型一次能處理的 token 數。越大越不容易截斷，但吃更多 VRAM 且變慢。AI 助手一輪要送提示詞 1.4～4 萬 tokens + 工具定義 5.5k + 對話與回答，建議 65536(24 GB 顯示卡可跑 27B 模型)；32768 只夠短對話，再低會被 Ollama 靜默截掉提示詞前半。
                 </p>
                 <div className="grid grid-cols-4 gap-2 mb-3">
                   {[8192, 16384, 32768, 65536].map((v) => (
@@ -2800,7 +2800,7 @@ export default function SettingsPage() {
                 <input
                   type="number"
                   value={numCtx}
-                  onChange={(e) => setNumCtx(Math.max(2048, Math.min(262144, parseInt(e.target.value) || 32768)))}
+                  onChange={(e) => setNumCtx(Math.max(2048, Math.min(262144, parseInt(e.target.value) || 65536)))}
                   min={2048}
                   max={262144}
                   step={2048}

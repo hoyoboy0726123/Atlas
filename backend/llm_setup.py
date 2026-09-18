@@ -74,7 +74,7 @@ def readiness() -> dict:
         cc = {"installed": False, "logged_in": False}
     keys = {p: bool(_key(p)) for p in KEY_ENV}
 
-    ready, problem = False, ""
+    ready, problem, warning = False, "", ""
     label = LABEL.get(provider, provider or "(未選擇)")
     if provider in KEY_ENV:
         if not keys[provider]:
@@ -90,6 +90,10 @@ def readiness() -> dict:
             problem = f"Ollama 裡還沒有模型 {model or '(未選擇)'},要先下載。"
         else:
             ready = True
+            num_ctx = int(s.get("ollama_num_ctx") or 0)
+            if num_ctx < 49152:
+                warning = (f"Ollama 的 context 目前 {num_ctx:,},AI 助手一輪常超過 3 萬 tokens、"
+                           f"塞不下時 Ollama 會靜默截掉提示詞前半。建議到設定頁改成 65,536。")
     elif provider == "claude_cli":
         if not cc.get("installed"):
             problem = "目前選的是 Claude 訂閱,但這台電腦還沒安裝 Claude Code。"
@@ -106,6 +110,7 @@ def readiness() -> dict:
         "provider_label": label,
         "model": model,
         "problem": problem,
+        "warning": warning,
         "detected": {
             "ollama": {"running": ollama_running, "models": ollama_models},
             "claude_cli": {"installed": bool(cc.get("installed")), "logged_in": bool(cc.get("logged_in"))},
