@@ -4332,16 +4332,16 @@ skill 節點讓 LLM 自由寫 code、輸出 JSON 時，**欄位名是 LLM 即興
 ## 4. 網頁爬蟲節點（web_crawler，wc_mode: web）
 **使用者說**：貼 URL「抓這頁」「爬」「擷取」
 ```yaml
-- name: 抓 Reddit 列表
+- name: 抓 PTT 科技業板列表
   web_crawler: true
-  wc_url: "https://www.reddit.com/r/LocalLLaMA/"
+  wc_url: "https://www.ptt.cc/bbs/Tech_Job/index.html"
   timeout: 90
 ```
 
 **多 URL** 用 `wc_urls: ["url1", "url2"]`，會輸出到資料夾、每 URL 一個檔。
 
 **論壇 / 列表模式 `wc_with_children`**（重要、優先推薦給「列表 → 詳細頁 → 摘要」場景）：
-使用者說「抓 PTT 股版前 10 篇做摘要」/「Reddit r/LocalLLaMA 討論摘要」/「Dcard 熱門帖內容分析」這類「**列表頁 → 子頁 → 處理**」結構時，**強烈建議開 `wc_with_children: true`**。
+使用者說「抓 PTT 股版前 10 篇做摘要」/「PTT 科技業板熱門討論摘要」/「Dcard 熱門帖內容分析」這類「**列表頁 → 子頁 → 處理**」結構時，**強烈建議開 `wc_with_children: true`**。
 
 ⚠️ **鐵律(實測踩過、Reddit 日報只抓到標題)**:任務要**摘要 / 分析貼文「內容」或「留言」**(不只列標題)時、**一定要設 `wc_with_children: true`**。
 否則只爬列表頁、只拿到標題 + 連結、貼文內文跟留言全空 → 下游 web_parser 抽出來 `content` / `top_comment` 都是空字串 → report_writer 沒料可寫只好腦補(產出假 TL;DR)。
@@ -4350,7 +4350,7 @@ skill 節點讓 LLM 自由寫 code、輸出 JSON 時，**欄位名是 LLM 即興
 ```yaml
 - name: 抓 PTT 股版列表 + 前 10 篇內文
   web_crawler: true
-  wc_url: "https://www.pttweb.cc/bbs/Stock"
+  wc_url: "https://www.ptt.cc/bbs/Stock/index.html"
   wc_with_children: true
   wc_max_children: 10              # 預設 10、可調
   # wc_child_link_pattern: ""      # 留空 = 自動辨識（涵蓋 Reddit/PTT/Dcard/HN/新聞 12 種）
@@ -4381,13 +4381,13 @@ exit_code 仍是 0。若不驗證就往下,下游 skill / report_writer 會**用
   系統偵測到爬蟲步有 expect → 會跑 AI 內容驗證(讀抓回的內容判斷是否真實、非 404/空頁/錯頁),
   **驗不過就讓該步失敗、流程停在這、不往下**(這正是使用者要的「確認真實才往下一步」)。
 ```yaml
-- name: 抓 r/LocalLLaMA 熱門
+- name: 抓 PTT 科技業板熱門
   web_crawler: true
-  wc_url: "https://www.reddit.com/r/LocalLLaMA/hot/"
+  wc_url: "https://www.ptt.cc/bbs/Tech_Job/index.html"
   wc_with_children: true
   timeout: 600
   output:
-    expect: "確實抓到 r/LocalLLaMA 的真實貼文(多篇標題+內文),status 非 4xx/5xx、非空頁、非錯誤頁;若只有導覽列/cookie 同意頁/404 視為失敗"
+    expect: "確實抓到 PTT 科技業板的真實貼文(多篇標題+內文),status 非 4xx/5xx、非空頁、非錯誤頁;若只有導覽列/cookie 同意頁/404 視為失敗"
 ```
 - 競品 / 比價 / 研究類**多站爬蟲**:每個爬蟲步都各自填 expect(描述該站該抓到什麼)。
 - 變化偵測類(偵測新文章 / 價格變動):同樣先驗「這次有抓到可比對的真實內容」再進 condition 比對。
@@ -4702,7 +4702,7 @@ step 3: subagent report_writer / summarizer
 - 上游是「**多筆** 貼文 / 商品 / 列表 row」→ web_parser + report_writer 對(抽 + 寫)
 
 ❌ 錯誤(實測案例):
-- 「每天抓 Reddit r/LocalLLaMA 熱門 → AI 摘要 → 寄信」用 summarizer 一步
+- 「每天抓 PTT 科技業板熱門 → AI 摘要 → 寄信」用 summarizer 一步
 ✅ 正確:
 - web_crawler(抓列表+子頁)→ web_parser(每篇抽 title/score/url/top_comment)
   → report_writer(寫逐篇條列日報)→ outlook_automation(寄信)
@@ -5587,7 +5587,7 @@ YAML 本身不負責排程。使用者提到「每天早上 9 點 / 每週一 / 
 > steps:
 >   - name: 抓 PTT Stock 列表
 >     web_crawler: true
->     wc_url: "https://www.pttweb.cc/bbs/Stock"
+>     wc_url: "https://www.ptt.cc/bbs/Stock/index.html"
 >     timeout: 90
 >   - name: 摘要 10 篇
 >     skill_mode: true

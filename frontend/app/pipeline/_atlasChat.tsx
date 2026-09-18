@@ -871,7 +871,7 @@ const ATLAS_ACTIONS: AtlasAction[] = [
   {
     id: 'scrape-ai', title: '爬蟲 + AI + Outlook', desc: '抓 → 摘要 → 確認 → 寄信', tag: 'Pipeline',
     examples: [
-      '每天抓 Reddit r/LocalLLaMA 熱門 → AI 摘要 → 產 Word 報告 → Telegram 確認 → Outlook 夾 Word 寄信',
+      '每天抓 PTT 科技業板熱門 → AI 摘要 → 產 Word 報告 → Telegram 確認 → Outlook 夾 Word 寄信',
       '抓 Hacker News top 10 → 中文翻譯 + 重點 → 產 Word → Outlook 夾 Word 草稿',
     ],
   },
@@ -1477,7 +1477,7 @@ function HeroMode({ envPaths, onYamlApply }: HeroModeProps) {
                   onKeyDown={onKeyDown}
                   disabled={heroLoading}
                   rows={1}
-                  placeholder="每天早上 9 點抓 Reddit 熱門 → AI 摘要 → Telegram 通知(Enter 送出 / Shift+Enter 換行)"
+                  placeholder="每天早上 9 點抓 PTT 科技業板熱門 → AI 摘要 → Telegram 通知(Enter 送出 / Shift+Enter 換行)"
                   style={{
                     flex: 1, border: 'none', outline: 'none', background: 'transparent',
                     fontFamily: FONT_MONO, fontSize: 13.5, color: ATLAS_PAL.ink, resize: 'none',
