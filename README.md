@@ -80,7 +80,7 @@ pip install -r requirements.txt
 
 ### Google Gemini(預設)
 
-預設使用 Gemini 的 `gemini-3.5-flash-lite`。到 [Google AI Studio](https://aistudio.google.com/apikey) 免費建立一把 API Key,貼到設定指引的輸入框即可;Atlas 會先向 Google 確認金鑰有效,再存進 `backend/.env`,不需要重新啟動。
+預設使用 Gemini 的 `gemini-3.5-flash-lite`,回應快、免費額度大;要規劃複雜的工作流時,建議改用 Claude 訂閱。到 [Google AI Studio](https://aistudio.google.com/apikey) 免費建立一把 API Key,貼到設定指引的輸入框即可;Atlas 會先向 Google 確認金鑰有效,再存進 `backend/.env`,不需要重新啟動。
 
 ### 其他雲端模型
 

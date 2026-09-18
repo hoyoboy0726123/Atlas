@@ -414,7 +414,7 @@ def patch_node_actions(query: str, step_name: str, ops_json: str,
 
     # 這兩種本來就不需要 control(uia_set_clipboard 根本不找控制項、
     # uia_close_window 沒給就用 step window),列進警告會叫使用者去挑一個不需要的東西
-    _NO_CTRL_NEEDED = {"uia_set_clipboard", "uia_close_window"}
+    _NO_CTRL_NEEDED = {"uia_set_clipboard", "uia_get_clipboard", "uia_close_window"}
     missing = [f"第 {i+1} 個({a.get('type')})" for i, a in enumerate(actions)
                if str(a.get("type") or "").startswith("uia_")
                and str(a.get("type")) not in _NO_CTRL_NEEDED
@@ -2103,6 +2103,10 @@ def read_help_doc(topic: str = "") -> str:
     - files   : 子代理產物的讀檔 / 傳檔(read_subagent_file vs send_subagent_file_to_tg
                 vs send_file_to_tg 差別)
     - cancel  : 中止跑中的子代理(cancel_subagent_task 判斷規則 / TG push 行為)
+    - computer_use : 桌面自動化動作全集 + 組合寫法(uia_wait 等待 / if_element_found 分歧 /
+                for_each 逐筆迴圈與 split_as / wait_download / Tk 剪貼簿交接 / click_method:mouse /
+                睡眠分頁喚醒 / CV・OCR 替代)。使用者問「怎麼做」桌面自動化的事**先讀這個**
+    - variables : {{ now.* }} 日期命名空間 / {{變數_序號}} / 同節點與跨節點傳值 / input / secrets
 
     Args:
         topic: 上述 topic 之一。留空 → 列可選 topic + 簡介。
