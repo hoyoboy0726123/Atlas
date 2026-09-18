@@ -255,6 +255,60 @@ _MODELS_CACHE: dict = {"ts": 0.0, "data": None}
 _MODELS_CACHE_TTL = 300.0  # 秒
 
 
+# ── 首次設定:沒有可用模型時的就緒檢查 / 貼金鑰 / 一鍵切換 ─────────────────
+class LlmKeyRequest(BaseModel):
+    provider: str
+    api_key: str
+    use_now: bool = True   # 存好後直接切成這家的預設模型
+
+
+class LlmUseRequest(BaseModel):
+    provider: str
+    model: str
+
+
+@app.get("/settings/llm-readiness")
+async def get_llm_readiness():
+    """目前的主模型能不能用 + 本機偵測到的替代選項(不呼叫模型)。"""
+    import llm_setup
+    return await asyncio.get_running_loop().run_in_executor(None, llm_setup.readiness)
+
+
+@app.post("/settings/llm-key")
+async def post_llm_key(req: LlmKeyRequest):
+    """把使用者在介面貼上的 API Key 存進 backend/.env,執行中的後端立即生效。金鑰不會回傳。"""
+    import llm_setup
+    loop = asyncio.get_running_loop()
+    ok, msg = await loop.run_in_executor(None, llm_setup.save_api_key, req.provider, req.api_key)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    if req.use_now and req.provider in llm_setup.DEFAULT_MODEL:
+        llm_setup.use_model(req.provider, llm_setup.DEFAULT_MODEL[req.provider])
+    _MODELS_CACHE["data"] = None
+    return await loop.run_in_executor(None, llm_setup.readiness)
+
+
+@app.post("/settings/llm-use")
+async def post_llm_use(req: LlmUseRequest):
+    """一鍵改用本機偵測到的模型(Ollama / Claude 訂閱),只動主模型的供應商與模型。"""
+    import llm_setup
+    try:
+        llm_setup.use_model(req.provider, req.model)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return await asyncio.get_running_loop().run_in_executor(None, llm_setup.readiness)
+
+
+async def _llm_not_ready() -> dict | None:
+    """送出對話前的就緒檢查。可用 → None;不可用 → readiness 結果(前端據此顯示設定指引)。"""
+    try:
+        import llm_setup
+        r = await asyncio.get_running_loop().run_in_executor(None, llm_setup.readiness)
+    except Exception:
+        return None   # 檢查本身出錯不擋對話,照舊交給模型呼叫端回報
+    return None if r.get("ready") else r
+
+
 @app.get("/settings/models/available")
 async def get_available_models(refresh: bool = False):
     """動態列出各 provider 可用模型。有 5 分鐘快取，加 ?refresh=true 強制更新。"""
@@ -6895,6 +6949,9 @@ async def pipeline_chat(req: PipelineChatRequest):
     on_tool_event callback 留給內部呼叫者用(例 TG handler 推進度訊息)、
     HTTP 端點不傳 callback。
     """
+    nr = await _llm_not_ready()
+    if nr:
+        raise HTTPException(status_code=424, detail=f"還沒有可以用的 AI 模型:{nr['problem']}請先到設定頁設定模型。")
     return await _chat_agent_loop(req)
 
 
@@ -7176,8 +7233,17 @@ async def pipeline_chat_stream(req: PipelineChatRequest):
     import json as _json
 
     async def _ndjson_gen():
+        nr = await _llm_not_ready()
+        if nr:
+            yield _json.dumps({"type": "error", "code": "llm_not_ready", "status_code": 424,
+                               "detail": nr["problem"], "readiness": nr}, ensure_ascii=False) + "\n"
+            return
         try:
             async for ev in _chat_agent_stream(req):
+                # 金鑰無效 / 缺金鑰是設定問題、不是系統錯誤 → 標代碼讓前端顯示設定指引
+                if (ev.get("type") == "error" and ev.get("status_code") in (400, 401)
+                        and "API Key" in str(ev.get("detail", ""))):
+                    ev = {**ev, "code": "llm_auth"}
                 yield _json.dumps(ev, ensure_ascii=False) + "\n"
         except Exception as e:
             yield _json.dumps({"type": "error", "detail": f"stream 內部錯誤:{type(e).__name__}: {str(e)[:300]}"}, ensure_ascii=False) + "\n"

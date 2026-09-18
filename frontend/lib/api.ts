@@ -1443,7 +1443,51 @@ export type ChatStreamEvent =
   | { type: 'tool_start'; name: string; args: Record<string, unknown> }
   | { type: 'tool_end'; name: string; result_preview: string }
   | { type: 'done'; reply: string; has_yaml: boolean; yaml_content: string | null; yaml_error: string | null }
-  | { type: 'error'; status_code?: number; detail: string }
+  | { type: 'error'; status_code?: number; detail: string; code?: 'llm_not_ready' | 'llm_auth' | string; readiness?: LlmReadiness }
+
+// ── 首次設定:AI 模型就緒檢查 ─────────────────────────────────────────
+export interface LlmReadiness {
+  ready: boolean
+  provider: string
+  provider_label: string
+  model: string
+  problem: string
+  detected: {
+    ollama: { running: boolean; models: string[] }
+    claude_cli: { installed: boolean; logged_in: boolean }
+    keys: Record<'gemini' | 'groq' | 'openai' | 'anthropic', boolean>
+  }
+  defaults: Record<string, string>
+}
+
+async function _llmSetupFetch(path: string, init?: RequestInit): Promise<LlmReadiness> {
+  const res = await fetch(`${BASE}${path}`, init)
+  if (!res.ok) {
+    const j = await res.json().catch(() => null)
+    throw new Error((j && typeof j.detail === 'string' && j.detail) || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export function getLlmReadiness(): Promise<LlmReadiness> {
+  return _llmSetupFetch('/settings/llm-readiness')
+}
+
+/** 存 API Key 到後端 .env(立即生效、不回傳金鑰),並切成該家的預設模型。 */
+export function saveLlmKey(provider: string, apiKey: string): Promise<LlmReadiness> {
+  return _llmSetupFetch('/settings/llm-key', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, api_key: apiKey, use_now: true }),
+  })
+}
+
+/** 一鍵改用本機偵測到的模型(只動主模型)。 */
+export function switchLlmModel(provider: string, model: string): Promise<LlmReadiness> {
+  return _llmSetupFetch('/settings/llm-use', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, model }),
+  })
+}
 
 /**
  * 串流呼叫 /pipeline/chat/stream、邊收事件邊 callback。

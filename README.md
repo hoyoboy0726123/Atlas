@@ -74,22 +74,39 @@ pip install -r requirements.txt
 
 ## 設定 AI 模型
 
-打開 **設定頁**(http://localhost:3012/settings),選擇主模型的供應商與模型。
+第一次使用時不用先設定:直接在首頁輸入你想自動化的事並送出,如果還沒有可用的模型,Atlas 會顯示設定指引,設定好後自動送出你剛剛的訊息。它也會偵測這台電腦現成可用的模型(已安裝的 Ollama 模型、已登入的 Claude Code),可以一鍵改用。
 
-### 雲端模型
+之後要換模型,到 **設定頁**(http://localhost:3012/settings)選擇主模型的供應商與模型。
 
-在 `backend/.env` 填入你要用的供應商 API Key(至少一個),重新啟動後端:
+### Google Gemini(預設)
+
+預設使用 Gemini 的 `gemini-3.5-flash-lite`。到 [Google AI Studio](https://aistudio.google.com/apikey) 免費建立一把 API Key,貼到設定指引的輸入框即可;Atlas 會先向 Google 確認金鑰有效,再存進 `backend/.env`,不需要重新啟動。
+
+### 其他雲端模型
+
+在 `backend/.env` 填入 API Key,重新啟動後端,再到設定頁選擇供應商與模型:
 
 | 供應商 | 環境變數 |
 |---|---|
-| Groq | `GROQ_API_KEY` |
 | Google Gemini | `GEMINI_API_KEY` |
+| Groq | `GROQ_API_KEY` |
 | OpenAI | `OPENAI_API_KEY` |
 | Anthropic | `ANTHROPIC_API_KEY` |
 
+### Claude 訂閱(Claude Code)
+
+已經有 Claude Pro / Max 方案的話,可以直接用訂閱額度,不需要 API Key:
+
+```bash
+npm install -g @anthropic-ai/claude-code
+claude          # 照畫面指示登入
+```
+
+登入後在設定指引按「改用並送出」,或到設定頁把供應商選成 Claude 訂閱。
+
 ### 本機模型(Ollama)
 
-裝好 Ollama、下載模型後,在設定頁把供應商選成 **Ollama**、選擇模型即可,不需要任何 API Key,資料不會離開你的電腦。
+裝好 Ollama、下載模型後,在設定指引按「改用並送出」,或到設定頁把供應商選成 **Ollama**,不需要任何 API Key,資料不會離開你的電腦。
 
 以下是實際測試過、能擔任 AI 助手的最小建議配置:
 

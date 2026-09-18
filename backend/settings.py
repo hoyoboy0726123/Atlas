@@ -4,16 +4,16 @@ import threading
 from pathlib import Path
 from typing import Optional
 
-from config import OUTPUT_BASE_PATH, GROQ_MODEL_MAIN
+from config import OUTPUT_BASE_PATH, GEMINI_MODEL_MAIN
 
 _SETTINGS_PATH = OUTPUT_BASE_PATH / "pipeline_settings.json"
 _lock = threading.Lock()
 
-# 預設：沿用環境變數 / config.py 預設的 Groq 模型
+# 預設:Gemini(只要貼上 API Key 就能用;模型見 config.GEMINI_MODEL_MAIN)
 _DEFAULT = {
     # ── 主模型(預設、所有節點不另設 llm_role 時用這個)──
-    "provider": "groq",           # "groq" | "ollama" | "gemini" | "openai" | "anthropic"
-    "model": GROQ_MODEL_MAIN,      # e.g. "meta-llama/llama-4-scout-17b-16e-instruct" or "qwen3:8b"
+    "provider": "gemini",         # "gemini" | "groq" | "ollama" | "openai" | "anthropic" | "claude_cli"
+    "model": GEMINI_MODEL_MAIN,    # e.g. "gemini-3.5-flash-lite" or "qwen3:8b"
     "ollama_base_url": "http://localhost:11434",
     "ollama_thinking": "off",      # "auto" | "on" | "off" — 預設關閉，避免 thinking 模式 rambling 卡住
     "ollama_num_ctx": 32768,       # Ollama context window tokens（僅 Ollama）；本應用 system prompt 約 17~22k，低於 32768 會截斷
@@ -185,6 +185,26 @@ def settings_signature() -> str:
     """回傳一個代表當前設定的簡易字串，用於 LLM 快取失效判斷。"""
     s = get_settings()
     return f"{s['provider']}::{s['model']}::{s['ollama_base_url']}::{s.get('ollama_thinking', 'off')}::{s.get('ollama_num_ctx', 16384)}"
+
+
+def set_primary_model(provider: str, model: str) -> dict:
+    """只換主模型的供應商與模型,其他欄位(副模型、thinking、num_ctx)原樣保留。
+    update_settings 會把沒帶的欄位重設成預設值,首次設定精靈不能用它。"""
+    global _cache
+    provider = (provider or "").strip()
+    if provider not in ("groq", "ollama", "gemini", "openai", "anthropic", "claude_cli"):
+        raise ValueError(f"invalid provider: {provider}")
+    if not (model or "").strip():
+        raise ValueError("model is required")
+    with _lock:
+        existing = _cache if _cache else _load_from_disk()
+        existing["provider"] = provider
+        existing["model"] = model.strip()
+        _SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(_SETTINGS_PATH, "w", encoding="utf-8") as f:
+            json.dump(existing, f, ensure_ascii=False, indent=2)
+        _cache = existing
+    return dict(existing)
 
 
 # ── Sandbox mode（獨立 setter，不混進 model 更新流程） ─────────────

@@ -8,11 +8,21 @@ import rehypeRaw from 'rehype-raw'
 // 會原字直出一排 | 符號（Lite 實測）。
 import remarkGfm from 'remark-gfm'
 import { useWorkflowStore } from './_store'
+import ModelSetupGuide from './_modelSetupGuide'
 import {
   pipelineChatStream,
   getEnvPaths, type EnvPaths,
   getWorkflowChat, appendWorkflowChat, clearWorkflowChat, setWorkflowChat,
 } from '@/lib/api'
+
+// 後端回報「沒有可用的 AI 模型 / 金鑰無效」時丟這個,讓對話改顯示設定指引而不是錯誤訊息
+class LlmSetupError extends Error {
+  code: string
+  constructor(code: string, detail: string) {
+    super(detail)
+    this.code = code
+  }
+}
 
 // ── AI Chat Message Type ─────────────────────────────────────────────────────
 interface ToolBlock {
@@ -30,6 +40,7 @@ export interface ChatMsg {
   yamlError?: string | null
   toolBlocks?: ToolBlock[]   // 串流時顯示的 tool 呼叫紀錄
   streaming?: boolean        // 串流中(顯示游標 / 還在打字)
+  setupGuide?: { code: string; detail: string }   // 沒有可用模型 → 顯示設定指引卡片
 }
 
 // 根據實際專案路徑組 AI 助手的初始訊息：範例使用真實可執行的腳本路徑，
@@ -246,6 +257,14 @@ export default function AtlasChat({ mode = 'sidebar', onYamlApply }: AtlasChatPr
     msgs.length === 1 && msgs[0].role === 'assistant' && !msgs[0].hasYaml
   const [input, setInput]     = useState('')
   const [loading, setLoading] = useState(false)
+  // 設定指引卡片按「送出」:移除卡片與它前面那句使用者訊息,再把那句重送一次
+  const retryFromGuide = (i: number) => {
+    const prevUser = messages[i - 1]
+    if (!prevUser || prevUser.role !== 'user') return
+    const base = messages.slice(0, i - 1)
+    setMessages(base)
+    handleSend({ text: prevUser.content, base, persistUser: false })
+  }
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   // 自動滾到底部
@@ -253,12 +272,14 @@ export default function AtlasChat({ mode = 'sidebar', onYamlApply }: AtlasChatPr
     if (showChat) chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, showChat])
 
-  const handleSend = async () => {
-    const text = input.trim()
+  // opts 給「設定好模型後重送」用:text/base 指定要重送的訊息與它之前的對話,
+  // persistUser=false 避免那句使用者訊息被第二次寫進對話紀錄
+  const handleSend = async (opts?: { text?: string; base?: ChatMsg[]; persistUser?: boolean }) => {
+    const text = (opts?.text ?? input).trim()
     if (!text || loading) return
     const userMsg: ChatMsg = { role: 'user', content: text }
     // 若當前只有 welcome 訊息，送出使用者訊息時把 welcome 丟掉（不存進歷史）
-    const baseMsgs = isWelcomeOnly(messages) ? [] : messages
+    const baseMsgs = opts?.base ?? (isWelcomeOnly(messages) ? [] : messages)
     const newMsgs = [...baseMsgs, userMsg]
     // 立即加入 user msg + 一個空的 assistant streaming bubble、後續 token 邊長邊填
     const assistantBubble: ChatMsg = {
@@ -270,7 +291,7 @@ export default function AtlasChat({ mode = 'sidebar', onYamlApply }: AtlasChatPr
     setMessages([...newMsgs, assistantBubble])
     setInput('')
     setLoading(true)
-    persistAppend(userMsg).catch(() => {/* 落地失敗不擋 UI */})
+    if (opts?.persistUser !== false) persistAppend(userMsg).catch(() => {/* 落地失敗不擋 UI */})
 
     let accumulated = ''
     let finalHasYaml = false
@@ -328,6 +349,7 @@ export default function AtlasChat({ mode = 'sidebar', onYamlApply }: AtlasChatPr
             // 用 done 事件帶的 reply 覆寫(_clean_latex 處理過的版本、比累積 token 更乾淨)
             accumulated = ev.reply || accumulated
           } else if (ev.type === 'error') {
+            if (ev.code === 'llm_not_ready' || ev.code === 'llm_auth') throw new LlmSetupError(ev.code, ev.detail)
             throw new Error(ev.detail || '串流錯誤')
           }
         },
@@ -365,6 +387,17 @@ export default function AtlasChat({ mode = 'sidebar', onYamlApply }: AtlasChatPr
         toast.error(`產生的 YAML 有語法問題：${errStr.slice(0, 120)}`)
       }
     } catch (e) {
+      if (e instanceof LlmSetupError) {
+        const guide: ChatMsg = { role: 'assistant', content: '', setupGuide: { code: e.code, detail: e.message } }
+        setMessages(prev => {
+          const copy = [...prev]
+          const last = copy[copy.length - 1]
+          if (last && last.role === 'assistant' && last.streaming) copy[copy.length - 1] = guide
+          else copy.push(guide)
+          return copy
+        })
+        return
+      }
       const errMsg = e instanceof Error ? e.message : '未知錯誤'
       toast.error(`AI 回應失敗:${errMsg.slice(0, 220)}`)
       // 把錯誤替換到 streaming bubble 上
@@ -572,7 +605,10 @@ export default function AtlasChat({ mode = 'sidebar', onYamlApply }: AtlasChatPr
                       ))}
                     </div>
                   )}
-                  {msg.role === 'assistant' ? (
+                  {msg.setupGuide ? (
+                    <ModelSetupGuide compact code={msg.setupGuide.code} detail={msg.setupGuide.detail}
+                      onRetry={() => retryFromGuide(i)} />
+                  ) : msg.role === 'assistant' ? (
                     <div className="prose prose-xs max-w-none prose-p:my-0.5 prose-pre:text-xs prose-pre:whitespace-pre-wrap prose-code:break-all">
                       <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{cleanLatexInChat(msg.content.replace(/YAML_READY\n/g, ''))}</ReactMarkdown>
                       {msg.streaming && (
@@ -657,7 +693,7 @@ export default function AtlasChat({ mode = 'sidebar', onYamlApply }: AtlasChatPr
               className="flex-1 border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs outline-none focus:border-indigo-400 transition-colors disabled:bg-gray-50 resize-none"
             />
             <button
-              onClick={handleSend}
+              onClick={() => handleSend()}
               disabled={!input.trim() || loading}
               className="w-7 h-7 flex items-center justify-center bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-40 transition-colors shrink-0"
             >
@@ -1035,11 +1071,11 @@ function HeroMode({ envPaths, onYamlApply }: HeroModeProps) {
   // 必須跟當前畫布工作流「完全脫鉤」:不帶歷史、也不帶 workflow_id。
   // 否則後端 _workflow_state_block 會把當前(如 PPT)工作流整份 YAML 灌進 system prompt、
   // 害 AI 把無關的新需求當成「對該工作流的增量編輯」(記憶汙染 bug 的真正來源)。
-  const heroHandleSend = async () => {
-    const text = heroInput.trim()
+  const heroHandleSend = async (opts?: { text?: string; base?: ChatMsg[] }) => {
+    const text = (opts?.text ?? heroInput).trim()
     if (!text || heroLoading) return
     const userMsg: ChatMsg = { role: 'user', content: text }
-    const baseMsgs = heroMessages
+    const baseMsgs = opts?.base ?? heroMessages
     const newMsgs = [...baseMsgs, userMsg]
     const assistantBubble: ChatMsg = {
       role: 'assistant',
@@ -1103,6 +1139,7 @@ function HeroMode({ envPaths, onYamlApply }: HeroModeProps) {
             finalYamlError = ev.yaml_error
             accumulated = ev.reply || accumulated
           } else if (ev.type === 'error') {
+            if (ev.code === 'llm_not_ready' || ev.code === 'llm_auth') throw new LlmSetupError(ev.code, ev.detail)
             throw new Error(ev.detail || '串流錯誤')
           }
         },
@@ -1128,6 +1165,17 @@ function HeroMode({ envPaths, onYamlApply }: HeroModeProps) {
         toast.error(`產生的 YAML 有語法問題:${errStr.slice(0, 120)}`)
       }
     } catch (e) {
+      if (e instanceof LlmSetupError) {
+        const guide: ChatMsg = { role: 'assistant', content: '', setupGuide: { code: e.code, detail: e.message } }
+        setHeroMessages(prev => {
+          const copy = [...prev]
+          const last = copy[copy.length - 1]
+          if (last && last.role === 'assistant' && last.streaming) copy[copy.length - 1] = guide
+          else copy.push(guide)
+          return copy
+        })
+        return
+      }
       const errMsg = e instanceof Error ? e.message : '未知錯誤'
       toast.error(`AI 回應失敗:${errMsg.slice(0, 220)}`)
       setHeroMessages(prev => {
@@ -1147,6 +1195,15 @@ function HeroMode({ envPaths, onYamlApply }: HeroModeProps) {
     } finally {
       setHeroLoading(false)
     }
+  }
+
+  // 設定指引卡片按「送出」:移除卡片與它前面那句使用者訊息,再把那句重送一次
+  const heroRetryFromGuide = (i: number) => {
+    const prevUser = heroMessages[i - 1]
+    if (!prevUser || prevUser.role !== 'user') return
+    const base = heroMessages.slice(0, i - 1)
+    setHeroMessages(base)
+    heroHandleSend({ text: prevUser.content, base })
   }
 
   // 送出 → 走 hero-local handleSend、訊息只更新 heroMessages、不 persist
@@ -1616,7 +1673,10 @@ function HeroMode({ envPaths, onYamlApply }: HeroModeProps) {
                         ))}
                       </div>
                     )}
-                    {msg.role === 'assistant' ? (
+                    {msg.setupGuide ? (
+                      <ModelSetupGuide code={msg.setupGuide.code} detail={msg.setupGuide.detail}
+                        onRetry={() => heroRetryFromGuide(i)} />
+                    ) : msg.role === 'assistant' ? (
                       <div className="prose prose-sm max-w-none prose-p:my-1 prose-pre:text-xs prose-pre:whitespace-pre-wrap prose-code:break-all">
                         <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{cleanLatexInChat(msg.content.replace(/YAML_READY\n/g, ''))}</ReactMarkdown>
                         {msg.streaming && (
