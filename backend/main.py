@@ -4260,6 +4260,12 @@ skill 節點讓 LLM 自由寫 code、輸出 JSON 時，**欄位名是 LLM 即興
 
 ## 1. 腳本節點（script）
 **使用者說**：「我的 xxx.py 腳本」「執行 xxx 指令」「跑這個批次檔」
+
+**script 節點只做一件事:執行「已經存在」的腳本 / 專案 / 系統指令** —— `batch` 填的是路徑與參數,
+不是程式碼。它跑的是**系統全域 Python**(沒有 pandas / matplotlib / python-docx 這些套件)。
+任何「要寫程式才做得到」的事 —— 分析、統計、轉檔、畫圖、產報告、生示範資料、算一個判斷值 ——
+**一律用 skill 節點**:skill 的程式跑在後端預載的 venv 裡,常用套件都有。
+判斷方式:使用者有沒有給你一個現成的檔案 / 指令?有 → script;沒有、要你想程式 → skill。
 ```yaml
 - name: 抓資料
   batch: |
@@ -4275,18 +4281,14 @@ skill 節點讓 LLM 自由寫 code、輸出 JSON 時，**欄位名是 LLM 即興
    會被 YAML 當成 mapping 解析、**整份 YAML 炸掉**（`mapping values are not allowed here`）。
    用 `|` 一律安全 — 所以**不管命令長什麼樣、永遠用 `batch: |`**。
 
-2. **絕對不要產多行的 `python -c "..."`**。多行 `python -c` 在 Windows 會被 shell
-   在換行處切斷 → **exit 0 卻什麼都沒執行**（靜默失敗、最難抓的那種 bug）。
-   要跑 inline Python：
-   - 簡單邏輯 → 寫成**單行**、用 `;` 串：
-     `python -c "import json; d=json.load(open('x.json')); print(len(d))"`
-   - 稍複雜 / 需要多行 / 含迴圈或 `with` → **改用 skill 節點**（描述需求讓 LLM 寫 .py），
-     不要硬塞多行 `python -c`。
+2. **不要用 `python -c "..."` 在 batch 裡寫程式**(單行、多行都不要)。它跑的是系統 Python、
+   套件不齊(`import pandas` 直接 ModuleNotFoundError、流程停下來等人裝套件),多行還會被
+   Windows shell 在換行處切斷 → exit 0 卻什麼都沒執行。要跑 Python 只有一條路:
+   **改用 skill 節點**,描述需求讓它寫 .py。唯一例外是 `python 既有腳本.py 參數`(執行現成檔案)。
 
 3. **`batch` 的內容是「命令列指令」,絕對不能直接寫 Python 程式碼**。
    `import pandas as pd` / `df = ...` 這種一行一行的 Python 貼進 batch,shell 會把 `import`
-   當成不存在的命令 → 直接報錯(實測踩過)。要跑 Python 只有兩條路:單行 `python -c "..."`,
-   或改用 skill 節點讓 LLM 寫成 .py 檔再執行。
+   當成不存在的命令 → 直接報錯(實測踩過)。
 
 ### 1b. 背景模式(`background: true`)— GUI / daemon / server
 **使用者說**:「開 GUI app」「啟動視窗」「跑一個 server」「daemon 跑著」「一直開著」「永遠不結束」、
@@ -4703,7 +4705,8 @@ expect 的數量條件要分兩種維度寫:
 
 **default = subagent + role**、不要先想「skill_mode 行不行」、不要「中等任務用 ad-hoc」。
 **例外**(才不用 subagent):
-1. 任務是純 deterministic 操作(轉檔 / 移動 / 計算固定公式 / 跑 CLI)→ script
+1. 執行現成的腳本 / CLI / 系統指令(使用者給了檔案或指令、不用寫程式)→ script;
+   要寫程式的 deterministic 處理(轉檔 / 計算固定公式)→ skill_mode(跑後端 venv、套件齊)
 2. 剛好有 mounted skill 完全 fit(scraped-content-parser 處理 PTT) → skill_mode + skill
 
 ⚠ **常見錯誤路由**(別犯):
@@ -4819,9 +4822,9 @@ PPT 大綱結構                → presentation_designer
 ### 任務複雜度分級(先判斷複雜度、再選工具)
 
 ```
-🟢 簡單(用 script / 掛預製 skill):
-  - 下載檔案、轉檔、複製、移動
-  - 跑現成 CLI 工具
+🟢 簡單(跑現成腳本 / CLI → script;要寫程式 → skill_mode 或掛預製 skill):
+  - 跑現成 CLI 工具、既有腳本(script,只填路徑與參數)
+  - 下載檔案、轉檔、複製、移動(skill_mode;別用 script 寫 Python)
   - 解析論壇 / PTT(掛 scraped-content-parser)
   - 用現成模板寄信(outlook_automation)
 
@@ -4904,7 +4907,7 @@ PPT 大綱結構                → presentation_designer
 找不到對應 role 嗎?
   ↓
 🟡 中等任務 → ad-hoc skill_mode(不掛 skill 也不掛 role、LLM 自由發揮)
-🟢 簡單任務 → script 節點(deterministic、寫 shell / 固定 Python)
+🟢 簡單任務 → 有現成腳本 / 指令就 script 節點(只填路徑);要寫程式就 ad-hoc skill_mode(跑後端 venv)
 🟢 一次性 deterministic 處理 → 掛 skill(若有對應預製 skill)
 ```
 
@@ -4913,7 +4916,7 @@ PPT 大綱結構                → presentation_designer
 ```
 1. 任務有專業歸屬(解析 / 比對 / 撰寫 / 翻譯 / 法律 / 財經 / ...)→ subagent + 對應 role
 2. 任務是 deterministic + 重複跑 → 掛預製 skill(scraped-content-parser / pdf-tool 等)
-3. 任務是 deterministic + 一次性 → script 節點
+3. 有現成腳本 / 指令可直接跑 → script 節點;沒有現成的、要寫程式 → skill(再簡單也別用 script 寫 Python)
 4. 任務需要 LLM 但無對應 role → ad-hoc skill_mode(最易 schema drift、避免用)
 ```
 
@@ -5080,7 +5083,7 @@ PPT 大綱結構                → presentation_designer
 
 **判斷值有兩種正確做法、擇一：**
 
-**做法 A — `script` 步驟 print 成 stdout(最簡單、script 節點用這個):**
+**做法 A — 既有 `script` 腳本本來就會 print 的值(只適用現成腳本;要另外算值走做法 B、別為此寫 python -c):**
 script 把要判斷的值 `print` 出來,condition 引用 `{{ steps.X.output.stdout }}`。
 
 **做法 B — skill 把判斷值放進它的 JSON 輸出檔(skill 節點要餵 condition 就用這個):**
@@ -5111,11 +5114,13 @@ skill 節點的 stdout 太雜(`[run_python]...`)沒法直接給 condition。但 
 ### IF 模式（`expression` + `on_true` / `on_false`）
 ```yaml
 - name: count_orders
-  batch: |
-    python -c "import json; print(len(json.load(open('orders.json'))))"
+  skill_mode: true
+  batch: 讀 orders.json 算出訂單筆數,存成 stats.json,欄位名叫 order_count
+  output:
+    path: stats.json
 - name: check_count
   condition: true
-  expression: "{{ steps.count_orders.output.stdout | int > 25 }}"   # Jinja2 布林表達式
+  expression: "{{ steps.count_orders.output.order_count | int > 25 }}"   # Jinja2 布林表達式
   on_true: 批次處理       # 成立 → 跳到這個 step name
   on_false: 簡易處理      # 不成立 → 跳到這個 step name（留空 = 結束流程）
 ```
@@ -5137,7 +5142,7 @@ skill 節點的 stdout 太雜(`[run_python]...`)沒法直接給 condition。但 
 ```yaml
 - name: read_status
   batch: |
-    python -c "print(open('status.txt').read().strip())"   # 把要分流的值 print 成 stdout
+    python check_status.py   # 既有腳本、本來就會把狀態 print 成 stdout
 - name: 依狀態分流
   condition: true
   switch: "{{ steps.read_status.output.stdout }}"
@@ -5476,12 +5481,12 @@ TG 對話**沒有按鈕**、必須走 /save 命令流程。流程跟 web 端略�
 那會產出**誤導性的假分析報告**、user 以為分析了真資料、其實全是亂數。
 
 **唯一例外 → 使用者明確說「示範 / demo / 用假資料 / 我只是想看效果」**:
-這時才在第一步用 script 生假資料示範(Hero 範例卡片如「AI 先生假銷售 csv」就是這種、
+這時才在第一步用 skill 生假資料示範(Hero 範例卡片如「AI 先生假銷售 csv」就是這種、
 example 文字本身已聲明要 demo):
 ```yaml
 - name: 生成示範資料
-  batch: |
-    python -c "import pandas as pd, numpy as np; df = pd.DataFrame({'date': pd.date_range('2026-01-01', periods=180), 'product': np.random.choice(['A','B','C'], 180), 'revenue': np.random.randint(1000,10000,180)}); df.to_csv('sample_sales.csv', index=False); print('已生示範資料')"
+  skill_mode: true
+  batch: 產生 180 天的示範銷售資料(date / product A-C / revenue 1000~10000 亂數),存成 sample_sales.csv
   output:
     path: sample_sales.csv
 - name: AI 分析
