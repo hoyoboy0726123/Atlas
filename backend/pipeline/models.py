@@ -38,6 +38,24 @@ class StepOutput(BaseModel):
     # 這是「弱模型也能穩」的結構化保證:生成端也會把 schema 塞進任務要求。
     json_schema: dict = {}
 
+    @field_validator("json_schema", mode="before")
+    @classmethod
+    def _coerce_json_schema(cls, v):
+        # 模型常把 schema 寫成帶引號的 JSON 字串(YAML 習慣),不該因此整份 YAML 被拒 → 自動解析
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                return {}
+            import json
+            try:
+                parsed = json.loads(v)
+            except Exception as e:
+                raise ValueError(f"json_schema 不是合法的 JSON 字串:{e}")
+            if not isinstance(parsed, dict):
+                raise ValueError("json_schema 必須是 JSON 物件")
+            return parsed
+        return v if v is not None else {}
+
     def get_expect(self) -> str:
         """取得驗證描述（優先 expect，fallback 到 description）"""
         return self.expect or self.description
